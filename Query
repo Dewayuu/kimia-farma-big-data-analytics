@@ -1,0 +1,110 @@
+--Create tabel analisa--
+CREATE TABLE kimia_farma.kf_analisa AS
+SELECT 
+  ft.transaction_id, 
+  ft.date, 
+  ft.branch_id,
+  kc.branch_name, 
+  kc.kota, 
+  kc.provinsi, 
+  kc.rating as rating_cabang, 
+  ft.customer_name, 
+  ft.product_id, 
+  pro.product_name, 
+  pro.price as actual_price, 
+  ft.discount_percentage,
+  laba.persentase_gross_laba,
+  pro.price - (pro.price * ft.discount_percentage) AS nett_sales,
+  (pro.price - (pro.price * ft.discount_percentage)) * persentase_gross_laba AS nett_profit,
+  ft.rating AS rating_transaksi
+FROM 
+  kimia_farma.kf_final_transaction as ft
+LEFT JOIN 
+  `kimia_farma.kf_kantor_cabang`as kc ON ft.branch_id = kc.branch_id
+LEFT JOIN 
+  kimia_farma.kf_product as pro ON ft.product_id = pro.product_id
+LEFT JOIN 
+  (SELECT 
+     product_id,
+     CASE
+       WHEN price <= 50000 THEN 0.1  
+       WHEN price > 50000 AND price <= 100000 THEN 0.15
+       WHEN price > 100000 AND price <= 300000 THEN 0.2
+       WHEN price > 300000 AND price <= 500000 THEN 0.25
+       WHEN price > 500000 THEN 0.15
+     END AS persentase_gross_laba
+   FROM 
+     kimia_farma.kf_product) as laba ON ft.product_id = laba.product_id;
+
+--Create tabel pendapatan dari tahun ke tahun--
+CREATE TABLE kimia_farma.kf_pendapatan AS
+SELECT 
+    analisa.date AS tahun,
+    SUM(analisa.nett_sales) AS total_pendapatan,
+    SUM(analisa.nett_profit) AS total_keuntungan
+FROM 
+    kimia_farma.kf_analisa AS analisa
+GROUP BY 
+    analisa.date;
+
+--Create tabel Top 10 Total transaksi cabang provinsi--
+CREATE TABLE kimia_farma.kf_total_transaksi AS
+SELECT 
+    kc.provinsi,
+    kc.kota AS cabang,
+    SUM(pro.price - (pro.price * ft.discount_percentage)) AS total_transaksi
+FROM 
+    kimia_farma.kf_final_transaction AS ft
+LEFT JOIN 
+    kimia_farma.kf_kantor_cabang AS kc ON ft.branch_id = kc.branch_id
+LEFT JOIN 
+    kimia_farma.kf_product AS pro ON ft.product_id = pro.product_id
+GROUP BY 
+    kc.provinsi, kc.kota
+ORDER BY 
+    total_transaksi DESC
+LIMIT 10;
+
+--Create tabel Top 10 Nett sales cabang provinsi--
+CREATE TABLE kimia_farma.kf_top_nett_sales AS
+SELECT 
+    kc.provinsi,
+    kc.kota AS cabang,
+    SUM(pro.price - (pro.price * ft.discount_percentage)) AS nett_sales
+FROM 
+    kimia_farma.kf_final_transaction AS ft
+LEFT JOIN 
+    kimia_farma.kf_kantor_cabang AS kc ON ft.branch_id = kc.branch_id
+LEFT JOIN 
+    kimia_farma.kf_product AS pro ON ft.product_id = pro.product_id
+GROUP BY 
+    kc.provinsi, kc.kota
+ORDER BY 
+    nett_sales DESC
+LIMIT 10;
+
+--Create tabel Top 5 Cabang Dengan Rating Tertinggi, namun Rating Transaksi Terendah--
+CREATE TABLE `kimia_farma.kf_5_cabang` AS
+SELECT
+  ft.branch_id,
+  AVG(ft.rating) as avg_rate_trans,
+  kc.rating as rating_cabang
+FROM
+  kimia_farma.kf_final_transaction as ft
+LEFT JOIN 
+  kimia_farma.kf_kantor_cabang as kc ON ft.branch_id = kc.branch_id
+GROUP BY 
+  ft.branch_id, kc.rating
+ORDER BY 
+  kc.rating DESC,AVG(ft.rating) ASC
+LIMIT 5;
+
+--Create tabel total profit masing-masing provinsi--
+CREATE TABLE kimia_farma.kf_total_profit AS
+SELECT 
+    analisa.provinsi,
+    SUM(analisa.nett_profit) AS total_profit
+FROM 
+    kimia_farma.kf_analisa AS analisa
+GROUP BY 
+    analisa.provinsi;
